@@ -1,3 +1,5 @@
 from atproto import Client
+import os
+from dotenv import load_dotenv
 
-client = Client()
+load_dotenv()
