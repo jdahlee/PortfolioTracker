@@ -6,6 +6,7 @@ import threading
 import requests
 import json
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 load_dotenv()
 
@@ -15,6 +16,7 @@ class BlueskyClient:
     client : Client
     per_post_retrieval_limit : int
     since_str : str
+    until_str : str
 
     def __init__(self) -> None:
         self.lock = threading.Lock()
@@ -26,13 +28,19 @@ class BlueskyClient:
         self.client.login(bluesky_username, bluesky_password)
 
         self.per_post_retrieval_limit = int(os.getenv('PER_POST_RETRIEVAL_LIMIT', '5'))
-        self.since_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z") # Datetime format expected by Bluesky API
+
+        since_local = Helpers.get_start_of_last_us_day()
+        since_utc = Helpers.convert_to_utc(since_local)
+        self.since_str = since_utc.strftime("%Y-%m-%dT%H:%M:%S.000Z") # Datetime format expected by Bluesky API
+        until_utc = since_utc + timedelta(days=1)
+        self.until_str = until_utc.strftime("%Y-%m-%dT%H:%M:%S.000Z") # Datetime format expected by Bluesky API
     
     def _retrieve_search_term_posts(self, search_term : str) -> None:
         search_term_params = models.AppBskyFeedSearchPosts.Params(
             q=search_term,
             limit=self.per_post_retrieval_limit,
             since=self.since_str,
+            until=self.until_str,
             sort='top',
             lang='en'
         )
@@ -43,6 +51,7 @@ class BlueskyClient:
             q="*",
             limit=self.per_post_retrieval_limit,
             since=self.since_str,
+            until=self.until_str,
             sort='top',
             lang='en',
             author=author_handle
@@ -92,8 +101,15 @@ class OllamaClient:
         self.url = 'http://localhost:' + port + '/api/generate'
         self.model = os.getenv('OLLAMA_MODEL', 'llama3.2')
 
-    def get_post_summary_response(self, posts : list[str]) -> str:
-        prompt = "please summarize the following bluesky posts from the past 24 hours to give an update on the stock market:"
+    def get_posts_summary_response(self, posts : list[str]) -> str:
+        day = Helpers.get_start_of_last_us_day()
+        default_prompt = f'You are a finance expert. You will be provided a series of posts from Bluesky gathered for the past day ({day.date()}).'
+        default_prompt += "Your job is to summarize the most important points from the posts and provide them as a bulleted list in a report."
+        default_prompt += "You should also provide a concise market outlook statement at the end of the report bassed on your analysis of the information provided."
+        default_prompt += "Please make sure to add explanations to any technical terms or acronyms used in your report or outlook statement."
+        default_prompt += "Please also include the date the report is for at the top of it."
+        prompt = os.getenv('OLLAMA_POST_SUMMARY_PROMPT', default_prompt)
+        prompt += "Here are the Bluesky posts:"
         prompt += "\n".join(posts)
         payload = {
             "model": self.model,
@@ -105,18 +121,30 @@ class OllamaClient:
         json_response = json.loads(request_response.text)
         return json_response["response"]
 
+class Helpers:
+    @staticmethod
+    def get_start_of_last_us_day() -> datetime:
+        us_eastern_tz = ZoneInfo('America/New_York')
+        last_completed_day = datetime.now(us_eastern_tz) - timedelta(days=1)
+        midnight_last_completed_day = last_completed_day.replace(hour=0, minute=0, microsecond=0)
+        return midnight_last_completed_day
+    
+    @staticmethod
+    def convert_to_utc(datetime : datetime) -> datetime:
+        utc_tz = ZoneInfo("UTC")
+        return datetime.astimezone(utc_tz)
 
 def main():
+    print("Starting to retrieve posts...")
     bluesky_client = BlueskyClient()
     all_posts = bluesky_client.retrieve_all_posts()
-
-    # for p in all_posts:
-    #     print("\n" + p.text + "\n")
+    print("Finished retrieving posts")
     
     # TODO clean out posts that contain a link to a personal website
+    print("Creating summary...\n")
     post_text = [p.text for p in all_posts]
     ollama_client = OllamaClient()
-    ollama_summary = ollama_client.get_post_summary_response(post_text)
+    ollama_summary = ollama_client.get_posts_summary_response(post_text)
     print(ollama_summary)
 
 def test():
