@@ -84,7 +84,6 @@ class BlueskyClient:
                 t = threading.Thread(target=self._retrieve_author_handle_posts, args=(author_handle,))
                 threads.append(t)
 
-
         for t in threads:
             t.start()
         for t in threads:
@@ -140,7 +139,7 @@ def main():
     all_posts = bluesky_client.retrieve_all_posts()
     print("Finished retrieving posts")
     
-    # TODO clean out posts that contain a link to a personal website
+    # TODO post cleaning to remove spam and useless ones
     print("Creating summary...\n")
     post_text = [p.text for p in all_posts]
     ollama_client = OllamaClient()
