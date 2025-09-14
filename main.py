@@ -1,6 +1,6 @@
 import os
-import argparse
 import logging
+import argparse
 from dotenv import load_dotenv
 from classes import BlueskyClient, OllamaClient, Helpers
 
@@ -22,7 +22,7 @@ def main():
     Helpers.write_to_output("Starting to retrieve posts...", output_type)
     bluesky_client = BlueskyClient()
     all_posts = bluesky_client.retrieve_all_posts()
-    Helpers.write_to_output("Finished retrieving posts", output_type)
+    Helpers.write_to_output(f"Finished retrieving {len(all_posts)} posts", output_type)
     
     # TODO post cleaning to remove spam and useless ones
     Helpers.write_to_output("Creating summary...\n", output_type)
