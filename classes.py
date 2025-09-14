@@ -1,5 +1,6 @@
 import os
 import json
+import logging
 import requests
 import threading
 from atproto import Client
@@ -102,6 +103,7 @@ class OllamaClient:
         day = Helpers.get_start_of_last_us_day()
         default_prompt = f'You are a finance expert. You will be provided a series of posts from Bluesky gathered for the past day ({day.date()}).'
         default_prompt += "Your job is to summarize the most important points from the posts and provide them as a bulleted list in a report."
+        default_prompt += "Discard posts that don't seem relevant to the US finanacial market or economy."
         default_prompt += "You should also provide a concise market outlook statement at the end of the report bassed on your analysis of the information provided."
         default_prompt += "Please make sure to add explanations to any technical terms or acronyms used in your report or outlook statement."
         default_prompt += "Please also include the date the report is for at the top of it."
@@ -130,3 +132,13 @@ class Helpers:
     def convert_to_utc(datetime : datetime) -> datetime:
         utc_tz = ZoneInfo("UTC")
         return datetime.astimezone(utc_tz)
+    
+    @staticmethod
+    def write_to_output(body, output_type : str) -> None:
+        if (output_type != "print" and output_type != "log"):
+            raise ValueError(f'Invalid output_type: {output_type}, must be either print or log')
+        
+        if output_type == "print":
+            print(body)
+        else:
+            logging.info(body)
