@@ -34,7 +34,7 @@ class BlueskyClient:
         until_utc = since_utc + timedelta(days=1)
         self.until_str = until_utc.strftime("%Y-%m-%dT%H:%M:%S.000Z") # Datetime format expected by Bluesky API
     
-    def _retrieve_search_term_posts(self, search_term : str) -> None:
+    def _fetch_search_term_posts(self, search_term : str) -> None:
         search_term_params = models.AppBskyFeedSearchPosts.Params(
             q=search_term,
             limit=self.per_post_retrieval_limit,
@@ -43,9 +43,9 @@ class BlueskyClient:
             sort='top',
             lang='en'
         )
-        self._retrieve_posts(search_term_params)
+        self._fetch_posts(search_term_params)
 
-    def _retrieve_author_handle_posts(self, author_handle : str) -> None:
+    def _fetch_author_handle_posts(self, author_handle : str) -> None:
         search_term_params = models.AppBskyFeedSearchPosts.Params(
             q="*",
             limit=self.per_post_retrieval_limit,
@@ -55,16 +55,16 @@ class BlueskyClient:
             lang='en',
             author=author_handle
         )
-        self._retrieve_posts(search_term_params)
+        self._fetch_posts(search_term_params)
 
-    def _retrieve_posts(self, params : models.AppBskyFeedSearchPosts.Params) -> None:
+    def _fetch_posts(self, params : models.AppBskyFeedSearchPosts.Params) -> None:
         result = self.client.app.bsky.feed.search_posts(params=params)
 
         with self.lock:
             for post in result.posts:
                 self.all_posts.append(post.record)
     
-    def retrieve_all_posts(self) -> list:
+    def fetch_all_posts(self) -> list:
         threads = []
 
         # comma seperated list of terms to search for posts that contain term in body
@@ -72,7 +72,7 @@ class BlueskyClient:
         if search_terms_str != None:
             search_terms = search_terms_str.split(",")
             for search_term in search_terms:
-                t = threading.Thread(target=self._retrieve_search_term_posts, args=(search_term,))
+                t = threading.Thread(target=self._fetch_search_term_posts, args=(search_term,))
                 threads.append(t)
 
         # comma seperated list of author handles to search for posts of, don't include @ ex: joe.bsky.social
@@ -80,7 +80,7 @@ class BlueskyClient:
         if author_handles_str != None:
             author_handles = author_handles_str.split(",")
             for author_handle in author_handles:
-                t = threading.Thread(target=self._retrieve_author_handle_posts, args=(author_handle,))
+                t = threading.Thread(target=self._fetch_author_handle_posts, args=(author_handle,))
                 threads.append(t)
 
         for t in threads:

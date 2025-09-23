@@ -22,7 +22,7 @@ def main():
     
     Helpers.write_to_output("Starting to retrieve posts...", output_type)
     bluesky_client = BlueskyClient()
-    all_posts = bluesky_client.retrieve_all_posts()
+    all_posts = bluesky_client.fetch_all_posts()
     Helpers.write_to_output(f"Finished retrieving {len(all_posts)} posts", output_type)
     
     # TODO post cleaning to remove spam and useless ones
