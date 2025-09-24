@@ -2,7 +2,7 @@ import os
 import logging
 import argparse
 from dotenv import load_dotenv
-from classes import BlueskyClient, OllamaClient, Helpers
+from classes import BlueskyClient, AlphaVantageClient, OllamaClient, Helpers
 
 load_dotenv()
 
@@ -24,12 +24,17 @@ def main():
     bluesky_client = BlueskyClient()
     all_posts = bluesky_client.fetch_all_posts()
     Helpers.write_to_output(f"Finished retrieving {len(all_posts)} posts", output_type)
+
+    Helpers.write_to_output("Starting to retrieve market data...", output_type)
+    alpha_vantage_client = AlphaVantageClient()
+    all_market_data = alpha_vantage_client.fetch_all_market_data()
+    Helpers.write_to_output(f"Finished retrieving market data", output_type)
     
     # TODO post cleaning to remove spam and useless ones
     Helpers.write_to_output("Creating summary...\n", output_type)
     post_text = [p.text for p in all_posts]
     ollama_client = OllamaClient()
-    ollama_summary = ollama_client.get_posts_summary_response(post_text)
+    ollama_summary = ollama_client.get_posts_summary_response(post_text, all_market_data)
     Helpers.write_to_output(ollama_summary, output_type)
 
 if __name__ == '__main__':
