@@ -27,14 +27,14 @@ def main():
     output_writer.write_to_output(f"Finished retrieving {len(all_posts)} posts")
 
     output_writer.write_to_output("Starting to retrieve market data...")
-    alpha_vantage_client = AlphaVantageClient()
+    alpha_vantage_client = AlphaVantageClient(output_writer)
     all_market_data = alpha_vantage_client.fetch_all_market_data()
     output_writer.write_to_output(f"Finished retrieving market data")
     
     # TODO post cleaning to remove spam and useless ones
     output_writer.write_to_output("Creating summary...\n")
     post_text = [p.text for p in all_posts]
-    ollama_client = OllamaClient()
+    ollama_client = OllamaClient(output_writer)
     ollama_summary = ollama_client.get_posts_summary_response(post_text, all_market_data)
     output_writer.write_to_output(ollama_summary)
 

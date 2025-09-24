@@ -25,7 +25,7 @@ class OutputWriter:
 class BlueskyClient:
     lock : threading.Lock
     all_posts: list
-    retrieval_errors : list
+    fetch_errors : list
     client : Client
     per_post_retrieval_limit : int
     since_str : str
@@ -35,7 +35,7 @@ class BlueskyClient:
     def __init__(self, output_writer : OutputWriter) -> None:
         self.lock = threading.Lock()
         self.all_posts = list()
-        self.retrieval_errors = list()
+        self.fetch_errors = list()
         bluesky_username = os.getenv('BLUESKY_USERNAME')
         bluesky_password = os.getenv('BLUESKY_PASSWORD')
     
@@ -83,10 +83,10 @@ class BlueskyClient:
         except Exception as e:
             with self.lock:
                 error_message = f"Recieved error while fetching posts for: {posts_identifier}: {e}"
-                self.retrieval_errors.append(error_message)
+                self.fetch_errors.append(error_message)
 
     def _flush_errors(self) -> None:
-        for error in self.retrieval_errors:
+        for error in self.fetch_errors:
             self.output_writer.write_to_output(error)
     
     def fetch_all_posts(self) -> list:
@@ -122,50 +122,70 @@ class AlphaVantageClient:
     api_url_base: str
     lock: threading.Lock
     all_market_data: dict
+    output_writer: OutputWriter
+    fetch_errors: list
 
-    def __init__(self) -> None:
+    def __init__(self, output_writer : OutputWriter) -> None:
         self.api_key = os.getenv('ALPHA_VANTAGE_API_KEY', '')
         self.api_url_base = 'https://www.alphavantage.co/query?'
         self.lock = threading.Lock()
         self.all_market_data = dict()
+        self.output_writer = output_writer
+        self.fetch_errors = list()
 
     def _fetch_daily_data(self, symbol : str) -> None:
-        function_title = 'TIME_SERIES_DAILY'
-        url = self._generate_api_url(function_title, symbol=symbol)
-        request_response = requests.get(url)
-        json_response = json.loads(request_response.text)
-        
-        daily_data = json_response["Time Series (Daily)"] # the last 100 days of data automatically included
-        recent_days = list(daily_data.keys())[:5]
-        symbol_data = dict()
-        for date in recent_days:
-            date_data = daily_data[date]
-            symbol_data[date] = {"open": date_data["1. open"], "close": date_data['4. close'], "volume": date_data['5. volume']}
-        
-        with self.lock:
-            self.all_market_data[symbol] = symbol_data
+        try:
+            function_title = 'TIME_SERIES_DAILY'
+            url = self._generate_api_url(function_title, symbol=symbol)
+            request_response = requests.get(url)
+            json_response = json.loads(request_response.text)
+            if json_response.get("Error Message"):
+                e = Exception(json_response.get("Error Message"))
+                raise(e)
+
+            daily_data = json_response["Time Series (Daily)"] # the last 100 days of data automatically included
+            recent_days = list(daily_data.keys())[:5]
+            symbol_data = dict()
+            for date in recent_days:
+                date_data = daily_data[date]
+                symbol_data[date] = {"open": date_data["1. open"], "close": date_data['4. close'], "volume": date_data['5. volume']}
+            
+            with self.lock:
+                self.all_market_data[symbol] = symbol_data
+        except Exception as e:
+            with self.lock:
+                error_message = f"Recieved error while fetching daily data for: {symbol}: {e}"
+                self.fetch_errors.append(error_message)
     
     def _fetch_top_movement_data(self) -> None:
-        function_title = 'TOP_GAINERS_LOSERS'
-        url = self._generate_api_url(function_title)
-        request_response = requests.get(url)
-        json_response = json.loads(request_response.text)
+        try:
+            function_title = 'TOP_GAINERS_LOSERS'
+            url = self._generate_api_url(function_title)
+            request_response = requests.get(url)
+            json_response = json.loads(request_response.text)
+            if json_response.get("Error Message"):
+                e = Exception(json_response.get("Error Message"))
+                raise(e)
 
-        update_string = json_response["last_updated"]
+            update_string = json_response["last_updated"]
 
-        top_gainers = json_response["top_gainers"]
-        filtered_gainers = [stock for stock in top_gainers if (float(stock["change_amount"]) > 1 and int(stock["volume"]) > 1000000)]
+            top_gainers = json_response["top_gainers"]
+            filtered_gainers = [stock for stock in top_gainers if (float(stock["change_amount"]) > 1 and int(stock["volume"]) > 1000000)]
 
-        top_losers = json_response["top_losers"]
-        filtered_losers = [stock for stock in top_losers if (float(stock["change_amount"]) < -1 and int(stock["volume"]) > 1000000)]
+            top_losers = json_response["top_losers"]
+            filtered_losers = [stock for stock in top_losers if (float(stock["change_amount"]) < -1 and int(stock["volume"]) > 1000000)]
 
-        most_actively_traded = json_response["most_actively_traded"]
-        filtered_most_active = [stock for stock in most_actively_traded if (float(stock["change_amount"]) < -1 or float(stock["change_amount"]) > 1)]
+            most_actively_traded = json_response["most_actively_traded"]
+            filtered_most_active = [stock for stock in most_actively_traded if (float(stock["change_amount"]) < -1 or float(stock["change_amount"]) > 1)]
 
-        with self.lock:
-            self.all_market_data["filtered top gainers as of " + update_string] = filtered_gainers
-            self.all_market_data["filtered top losers as of " + update_string] = filtered_losers
-            self.all_market_data["filtered most traded as of" + update_string] = filtered_most_active
+            with self.lock:
+                self.all_market_data["filtered top gainers as of " + update_string] = filtered_gainers
+                self.all_market_data["filtered top losers as of " + update_string] = filtered_losers
+                self.all_market_data["filtered most traded as of" + update_string] = filtered_most_active
+        except Exception as e:
+            with self.lock:
+                error_message = f"Recieved error while fetching top movement data: {e}"
+                self.fetch_errors.append(error_message)
 
     def fetch_all_market_data(self) -> dict:
         threads = [] # NOTE Alpha Vantage has limit of 25 requests per day
@@ -185,8 +205,14 @@ class AlphaVantageClient:
             t.start()
         for t in threads:
             t.join()
+
+        self._flush_errors()
         
         return self.all_market_data
+    
+    def _flush_errors(self) -> None:
+        for error in self.fetch_errors:
+            self.output_writer.write_to_output(error)
 
     def _generate_api_url(self, function : str, symbol : str | None = None) -> str:
         url = self.api_url_base
@@ -199,36 +225,50 @@ class AlphaVantageClient:
 class OllamaClient:
     url : str
     model : str
+    output_writer : OutputWriter
+    errors : list
 
-    def __init__(self) -> None:
+    def __init__(self, output_writer : OutputWriter) -> None:
         port = os.getenv('OLLAMA_PORT','11434')
         self.url = 'http://localhost:' + port + '/api/generate'
         self.model = os.getenv('OLLAMA_MODEL', 'llama3.2')
+        self.output_writer  = output_writer
+        self.errors = list()
 
     def get_posts_summary_response(self, posts : list[str], market_data : dict) -> str:
-        day = Helpers.get_start_of_last_us_day()
-        default_prompt = f'You are a finance expert. You will be provided a series of posts from Bluesky gathered from the past day ({day.date()})'
-        default_prompt += " and some market data including stocks that had significant movement or that are relevant to my portfolio."
-        default_prompt += " Your job is to summarize the most important points from the Bluesky posts and provide them as a bulleted list in a report."
-        default_prompt += " Discard pieces of information that don't seem relevant to the US financial market and economy."
-        default_prompt += " Only include raw market data if it can be connected to a Bluesky post."
-        default_prompt += " You should also provide a concise market outlook statement at the end of the report bassed on your analysis."
-        default_prompt += " Please add explanations to any technical terms or acronyms used in the report."
-        default_prompt += " Please also include the date the report is for at the top of it."
-        prompt = os.getenv('OLLAMA_POST_SUMMARY_PROMPT', default_prompt)
-        prompt += "\nHere are the Bluesky posts:"
-        prompt += "\n".join(posts)
-        prompt += "\nHere is the market data:"
-        prompt += str(market_data)
-        payload = {
-            "model": self.model,
-            "prompt": prompt,
-            "stream": False
-        }
+        try:
+            day = Helpers.get_start_of_last_us_day()
+            default_prompt = f'You are a finance expert. You will be provided a series of posts from Bluesky gathered from the past day ({day.date()})'
+            default_prompt += " and some market data including stocks that had significant movement or that are relevant to my portfolio."
+            default_prompt += " Your job is to summarize the most important points from the Bluesky posts and provide them as a bulleted list in a report."
+            default_prompt += " Discard pieces of information that don't seem relevant to the US financial market and economy."
+            default_prompt += " Only include raw market data if it can be connected to a Bluesky post."
+            default_prompt += " You should also provide a concise market outlook statement at the end of the report bassed on your analysis."
+            default_prompt += " Please add explanations to any technical terms or acronyms used in the report."
+            default_prompt += " Please also include the date the report is for at the top of it."
+            prompt = os.getenv('OLLAMA_POST_SUMMARY_PROMPT', default_prompt)
+            prompt += "\nHere are the Bluesky posts:"
+            prompt += "\n".join(posts)
+            prompt += "\nHere is the market data:"
+            prompt += str(market_data)
+            payload = {
+                "model": self.model,
+                "prompt": prompt,
+                "stream": False
+            }
 
-        request_response = requests.post(self.url, json = payload)
-        json_response = json.loads(request_response.text)
-        return json_response["response"]
+            request_response = requests.post(self.url, json = payload)
+            json_response = json.loads(request_response.text)
+            return json_response["response"]
+        except Exception as e:
+            error_message = f"Recieved error while generating summary: {e}"
+            self.errors.append(error_message)
+            self._flush_errors()
+            return ""
+
+    def _flush_errors(self) -> None:
+        for error in self.errors:
+            self.output_writer.write_to_output(error)
     
 class Helpers:
     @staticmethod
