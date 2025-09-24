@@ -182,11 +182,11 @@ class OllamaClient:
         day = Helpers.get_start_of_last_us_day()
         default_prompt = f'You are a finance expert. You will be provided a series of posts from Bluesky gathered from the past day ({day.date()})'
         default_prompt += " and some market data including stocks that had significant movement or that are relevant to my portfolio."
-        default_prompt += " Your job is to summarize the most important points from the data and provide them as a bulleted list in a report."
-        default_prompt += " Discard pieces of information that don't seem relevant to the US finanacial market / economy or of significance."
-        default_prompt += " Avoid using raw market data unless it connects to a Bluesky post or has significant ramifications for the overall market."
-        default_prompt += " You should also provide a concise market outlook statement at the end of the report bassed on your analysis of the information provided."
-        default_prompt += " Please make sure to add explanations to any technical terms or acronyms used in your report or outlook statement."
+        default_prompt += " Your job is to summarize the most important points from the Bluesky posts and provide them as a bulleted list in a report."
+        default_prompt += " Discard pieces of information that don't seem relevant to the US financial market and economy."
+        default_prompt += " Only include raw market data if it can be connected to a Bluesky post."
+        default_prompt += " You should also provide a concise market outlook statement at the end of the report bassed on your analysis."
+        default_prompt += " Please add explanations to any technical terms or acronyms used in the report."
         default_prompt += " Please also include the date the report is for at the top of it."
         prompt = os.getenv('OLLAMA_POST_SUMMARY_PROMPT', default_prompt)
         prompt += "\nHere are the Bluesky posts:"
