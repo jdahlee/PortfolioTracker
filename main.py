@@ -20,7 +20,7 @@ def main():
         logging.getLogger("httpx").setLevel(logging.WARNING)
     
     Helpers.write_to_output("Starting to retrieve posts...", output_type)
-    bluesky_client = BlueskyClient()
+    bluesky_client = BlueskyClient(output_type)
     all_posts = bluesky_client.fetch_all_posts()
     Helpers.write_to_output(f"Finished retrieving {len(all_posts)} posts", output_type)
 

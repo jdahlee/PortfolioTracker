@@ -12,14 +12,17 @@ from datetime import datetime, timedelta
 class BlueskyClient:
     lock : threading.Lock
     all_posts: list
+    retrieval_errors : list
     client : Client
     per_post_retrieval_limit : int
     since_str : str
     until_str : str
+    output_type : str
 
-    def __init__(self) -> None:
+    def __init__(self, output_type : str) -> None:
         self.lock = threading.Lock()
         self.all_posts = list()
+        self.retrieval_errors = list()
         bluesky_username = os.getenv('BLUESKY_USERNAME')
         bluesky_password = os.getenv('BLUESKY_PASSWORD')
     
@@ -27,6 +30,7 @@ class BlueskyClient:
         self.client.login(bluesky_username, bluesky_password)
 
         self.per_post_retrieval_limit = int(os.getenv('PER_POST_RETRIEVAL_LIMIT', '5'))
+        self.output_type = output_type
 
         since_local = Helpers.get_start_of_last_us_day()
         since_utc = Helpers.convert_to_utc(since_local)
@@ -43,7 +47,7 @@ class BlueskyClient:
             sort='top',
             lang='en'
         )
-        self._fetch_posts(search_term_params)
+        self._fetch_posts(search_term_params, search_term)
 
     def _fetch_author_handle_posts(self, author_handle : str) -> None:
         search_term_params = models.AppBskyFeedSearchPosts.Params(
@@ -55,14 +59,22 @@ class BlueskyClient:
             lang='en',
             author=author_handle
         )
-        self._fetch_posts(search_term_params)
+        self._fetch_posts(search_term_params, author_handle)
 
-    def _fetch_posts(self, params : models.AppBskyFeedSearchPosts.Params) -> None:
-        result = self.client.app.bsky.feed.search_posts(params=params)
+    def _fetch_posts(self, params : models.AppBskyFeedSearchPosts.Params, posts_identifier : str) -> None:
+        try:
+            result = self.client.app.bsky.feed.search_posts(params=params)
+            with self.lock:
+                for post in result.posts:
+                    self.all_posts.append(post.record)
+        except Exception as e:
+            with self.lock:
+                error_message = f"Recieved error while fetching posts for: {posts_identifier}: {e}"
+                self.retrieval_errors.append(error_message)
 
-        with self.lock:
-            for post in result.posts:
-                self.all_posts.append(post.record)
+    def _flush_errors(self) -> None:
+        for error in self.retrieval_errors:
+            Helpers.write_to_output(error, self.output_type)
     
     def fetch_all_posts(self) -> list:
         threads = []
@@ -88,6 +100,8 @@ class BlueskyClient:
         for t in threads:
             t.join()
         
+        self._flush_errors()
+
         return self.all_posts
     
 class AlphaVantageClient:
