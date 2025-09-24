@@ -8,6 +8,19 @@ from atproto_client import models
 from zoneinfo import ZoneInfo
 from datetime import datetime, timedelta
 
+class OutputWriter:
+    output_type: str
+
+    def __init__(self, output_type : str) -> None:
+        if (output_type != "print" and output_type != "log"):
+            raise ValueError(f'Invalid output_type: {output_type}, must be either print or log')
+        self.output_type = output_type
+    
+    def write_to_output(self, body : str) -> None:
+        if self.output_type == "print":
+            print(body)
+        else:
+            logging.info(body)
 
 class BlueskyClient:
     lock : threading.Lock
@@ -17,9 +30,9 @@ class BlueskyClient:
     per_post_retrieval_limit : int
     since_str : str
     until_str : str
-    output_type : str
+    output_writer : OutputWriter
 
-    def __init__(self, output_type : str) -> None:
+    def __init__(self, output_writer : OutputWriter) -> None:
         self.lock = threading.Lock()
         self.all_posts = list()
         self.retrieval_errors = list()
@@ -30,7 +43,7 @@ class BlueskyClient:
         self.client.login(bluesky_username, bluesky_password)
 
         self.per_post_retrieval_limit = int(os.getenv('PER_POST_RETRIEVAL_LIMIT', '5'))
-        self.output_type = output_type
+        self.output_writer = output_writer
 
         since_local = Helpers.get_start_of_last_us_day()
         since_utc = Helpers.convert_to_utc(since_local)
@@ -74,7 +87,7 @@ class BlueskyClient:
 
     def _flush_errors(self) -> None:
         for error in self.retrieval_errors:
-            Helpers.write_to_output(error, self.output_type)
+            self.output_writer.write_to_output(error)
     
     def fetch_all_posts(self) -> list:
         threads = []
@@ -229,13 +242,3 @@ class Helpers:
     def convert_to_utc(datetime : datetime) -> datetime:
         utc_tz = ZoneInfo("UTC")
         return datetime.astimezone(utc_tz)
-    
-    @staticmethod
-    def write_to_output(body, output_type : str) -> None:
-        if (output_type != "print" and output_type != "log"):
-            raise ValueError(f'Invalid output_type: {output_type}, must be either print or log')
-        
-        if output_type == "print":
-            print(body)
-        else:
-            logging.info(body)
