@@ -18,7 +18,6 @@ def main():
         log_path += "/" + log_date.strftime("%m_%d_%Y") + ".log"
         logging.basicConfig(filename=log_path, level=logging.INFO)
         logging.getLogger("httpx").setLevel(logging.WARNING)
-        print("Writing output to file: " + log_path)
     
     Helpers.write_to_output("Starting to retrieve posts...", output_type)
     bluesky_client = BlueskyClient()
