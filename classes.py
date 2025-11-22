@@ -259,6 +259,10 @@ class OllamaClient:
 
             request_response = requests.post(self.url, json = payload)
             json_response = json.loads(request_response.text)
+            if json_response.get("error"):
+                e = Exception(json_response.get("error"))
+                raise(e)
+            
             return json_response["response"]
         except Exception as e:
             error_message = f"Recieved error while generating summary: {e}"
